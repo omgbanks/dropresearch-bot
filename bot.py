@@ -5,12 +5,10 @@ import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-# ─── CONFIG — keys loaded from environment variables, never hardcoded ──────────
+# ─── CONFIG — loaded from environment variables ────────────────────────────────
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-GEMINI_KEY = os.environ.get("GEMINI_KEY")
-
-def get_gemini_url():
-    return f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
+GROQ_KEY = os.environ.get("GROQ_KEY")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 # ─── SYSTEM PROMPTS ───────────────────────────────────────────────────────────
 RESEARCH_PROMPT = """You are an expert organic dropshipping product researcher. The seller runs AI-generated emotional "handmade small business pity" video ads on TikTok, Instagram Reels, and Facebook. Ad formats: "no one came to the sale", "parent in car emotional plea", "making by hand", "mean comment reaction". Product positioned as handmade. Core demo: 16-28 aesthetic women (coquette/soft girl/cottagecore). Also must appeal to Facebook parent/gift buyers. COGS under $15, sell $35-50. Product MUST look handmade-believable (yarn/fabric/flowers NOT electronics/plastic).
@@ -26,17 +24,26 @@ HOOKS_PROMPT = """You write viral emotional pity hooks for handmade small busine
 
 SCRIPT_PROMPT = """You write full scene-by-scene video scripts for emotional handmade pity ads. Include: scene setup, character actions, minimal realistic dialogue, CapCut text overlay suggestions, CTA. Use clear scene labels."""
 
-# ─── GEMINI CALL ──────────────────────────────────────────────────────────────
-def ask_gemini(system, message):
-    payload = {
-        "contents": [{"parts": [{"text": f"{system}\n\nRequest: {message}"}]}],
-        "generationConfig": {"temperature": 0.7, "maxOutputTokens": 4000}
+# ─── GROQ CALL ────────────────────────────────────────────────────────────────
+def ask_groq(system, message):
+    headers = {
+        "Authorization": f"Bearer {GROQ_KEY}",
+        "Content-Type": "application/json"
     }
-    response = requests.post(get_gemini_url(), headers={"Content-Type": "application/json"}, json=payload, timeout=60)
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": message}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 4000
+    }
+    response = requests.post(GROQ_URL, headers=headers, json=payload, timeout=60)
     data = response.json()
     if "error" in data:
         raise Exception(data["error"]["message"])
-    return data["candidates"][0]["content"]["parts"][0]["text"]
+    return data["choices"][0]["message"]["content"]
 
 # ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
 def stars(n):
@@ -102,7 +109,7 @@ AI product research for your emotional handmade pity ad format.
 
 *Commands:*
 🔍 `/research [keyword]` — Score 5 products
-🏆 `/winner [product]` — Full winner analysis  
+🏆 `/winner [product]` — Full winner analysis
 🪝 `/hooks [product]` — 5 viral pity hooks
 📝 `/script [product]` — Full video script
 
@@ -120,7 +127,7 @@ async def research(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyword = " ".join(context.args)
     msg = await update.message.reply_text(f"🔍 Researching *{keyword}*...", parse_mode="Markdown")
     try:
-        txt = ask_gemini(RESEARCH_PROMPT, f'Keyword: "{keyword}"')
+        txt = ask_groq(RESEARCH_PROMPT, f'Keyword: "{keyword}"')
         match = re.search(r'\[[\s\S]*\]', txt)
         if not match:
             raise Exception("No JSON found — try again")
@@ -145,7 +152,7 @@ async def winner(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product = " ".join(context.args)
     msg = await update.message.reply_text(f"🏆 Analyzing *{product}*...", parse_mode="Markdown")
     try:
-        txt = ask_gemini(WINNER_PROMPT, f"Winning product: {product}")
+        txt = ask_groq(WINNER_PROMPT, f"Winning product: {product}")
         match = re.search(r'\{[\s\S]*\}', txt)
         if not match:
             raise Exception("No JSON found")
@@ -164,7 +171,7 @@ async def hooks(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product = " ".join(context.args)
     msg = await update.message.reply_text(f"🪝 Writing hooks for *{product}*...", parse_mode="Markdown")
     try:
-        txt = ask_gemini(HOOKS_PROMPT, f'Write 5 viral emotional pity hooks for: {product}. Mix: "no one came to the sale", "parent in car", "mean comment reaction", "parent asking viewers to comment".')
+        txt = ask_groq(HOOKS_PROMPT, f'Write 5 viral emotional pity hooks for: {product}. Mix: "no one came to the sale", "parent in car", "mean comment reaction", "parent asking viewers to comment".')
         await msg.edit_text(f"🪝 *Hooks — {product}*\n\n{txt}", parse_mode="Markdown")
     except Exception as e:
         await msg.edit_text(f"❌ Failed: {str(e)}")
@@ -176,7 +183,7 @@ async def script(update: Update, context: ContextTypes.DEFAULT_TYPE):
     product = " ".join(context.args)
     msg = await update.message.reply_text(f"📝 Writing script for *{product}*...", parse_mode="Markdown")
     try:
-        txt = ask_gemini(SCRIPT_PROMPT, f'Write a full "no one came to the sale" video script for: {product}. Include scene description, actions, minimal dialogue, CapCut text overlays, emotional CTA.')
+        txt = ask_groq(SCRIPT_PROMPT, f'Write a full "no one came to the sale" video script for: {product}. Include scene description, actions, minimal dialogue, CapCut text overlays, emotional CTA.')
         for i in range(0, len(txt), 4000):
             if i == 0:
                 await msg.edit_text(f"📝 *Script — {product}*\n\n{txt[:4000]}", parse_mode="Markdown")
@@ -192,21 +199,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if action == "hooks":
         await query.message.reply_text(f"🪝 Writing hooks...", parse_mode="Markdown")
         try:
-            txt = ask_gemini(HOOKS_PROMPT, f'Write 5 viral emotional pity hooks for: {product}.')
+            txt = ask_groq(HOOKS_PROMPT, f'Write 5 viral emotional pity hooks for: {product}.')
             await query.message.reply_text(f"🪝 *Hooks — {product}*\n\n{txt}", parse_mode="Markdown")
         except Exception as e:
             await query.message.reply_text(f"❌ {str(e)}")
     elif action == "script":
         await query.message.reply_text(f"📝 Writing script...", parse_mode="Markdown")
         try:
-            txt = ask_gemini(SCRIPT_PROMPT, f'Write a full "no one came to the sale" script for: {product}.')
+            txt = ask_groq(SCRIPT_PROMPT, f'Write a full "no one came to the sale" script for: {product}.')
             await query.message.reply_text(f"📝 *Script — {product}*\n\n{txt[:4000]}", parse_mode="Markdown")
         except Exception as e:
             await query.message.reply_text(f"❌ {str(e)}")
     elif action == "winner":
         await query.message.reply_text(f"🏆 Analyzing...", parse_mode="Markdown")
         try:
-            txt = ask_gemini(WINNER_PROMPT, f"Winning product: {product}")
+            txt = ask_groq(WINNER_PROMPT, f"Winning product: {product}")
             match = re.search(r'\{[\s\S]*\}', txt)
             if match:
                 result = json.loads(match.group())
@@ -244,7 +251,7 @@ def main():
     app.add_handler(CommandHandler("script", script))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("✅ DropResearch Bot is running...")
+    print("✅ DropResearch Bot running on Groq...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
