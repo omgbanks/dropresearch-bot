@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_KEY = os.environ.get("GEMINI_KEY")
 
 def get_gemini_url():
-    return f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_KEY}"
+    return f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_KEY}"
 
 # ─── SYSTEM PROMPTS ───────────────────────────────────────────────────────────
 RESEARCH_PROMPT = """You are an expert organic dropshipping product researcher. The seller runs AI-generated emotional "handmade small business pity" video ads on TikTok, Instagram Reels, and Facebook. Ad formats: "no one came to the sale", "parent in car emotional plea", "making by hand", "mean comment reaction". Product positioned as handmade. Core demo: 16-28 aesthetic women (coquette/soft girl/cottagecore). Also must appeal to Facebook parent/gift buyers. COGS under $15, sell $35-50. Product MUST look handmade-believable (yarn/fabric/flowers NOT electronics/plastic).
